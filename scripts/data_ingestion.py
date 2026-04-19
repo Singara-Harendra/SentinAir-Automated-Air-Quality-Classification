@@ -10,8 +10,14 @@ import logging
 import pickle
 from pathlib import Path
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+LOG_DIR = Path('logs')
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    filename=LOG_DIR / 'data_ingestion.log',
+    filemode='a',
+    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+)
 logger = logging.getLogger(__name__)
 
 def ingest_data(input_path: str, output_path: str) -> None:
