@@ -1,0 +1,5 @@
+FROM apache/airflow:2.9.3
+
+COPY requirements.airflow.txt /requirements.airflow.txt
+
+RUN pip install --no-cache-dir --default-timeout=1000 --retries 10 -r /requirements.airflow.txt

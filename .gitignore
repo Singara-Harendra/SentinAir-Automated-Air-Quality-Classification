@@ -1,0 +1,15 @@
+/venv
+.env
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.DS_Store
+.dvc/cache/
+.dvc/tmp/
+logs/
+artifacts/
+mlruns/
+data/processed/*.csv
+data/raw/*.csv
+*.csv 

@@ -1,0 +1,79 @@
+{
+  "title": "SentinAir MLOps Dashboard",
+  "uid": "sentinair-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Total Predictions",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "sum(sentinair_predictions_total)",
+        "legendFormat": "Total"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Error Rate",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "sentinair_error_rate",
+        "legendFormat": "Error Rate"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"steps": [
+        {"color": "green", "value": 0},
+        {"color": "yellow", "value": 0.03},
+        {"color": "red", "value": 0.05}
+      ]}}}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Total Feedback",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "sentinair_feedback_total",
+        "legendFormat": "Feedback"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"}
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Predictions Over Time (by class)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "rate(sentinair_predictions_total[5m])",
+        "legendFormat": "{{class_label}}"
+      }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Inference Latency (p99)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "histogram_quantile(0.99, rate(sentinair_inference_latency_seconds_bucket[5m]))",
+        "legendFormat": "p99 latency"
+      }],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Error Rate Over Time",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "sentinair_error_rate",
+        "legendFormat": "Error Rate"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"steps": [
+        {"color": "green", "value": 0},
+        {"color": "red", "value": 0.05}
+      ]}}}
+    }
+  ],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {}
+}

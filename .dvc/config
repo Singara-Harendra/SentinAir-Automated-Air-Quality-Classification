@@ -1,0 +1,5 @@
+[core]
+    no_scm = True
+    remote = localremote
+['remote "localremote"']
+    url = /home/harendra/dvc_remote_storage

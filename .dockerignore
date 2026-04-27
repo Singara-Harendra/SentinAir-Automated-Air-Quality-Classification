@@ -1,0 +1,27 @@
+# Ignore virtual environment and local config
+venv
+.env
+
+# Ignore git metadata
+.git
+
+# Ignore data, artifacts, and runtime files
+data/
+artifacts/
+logs/
+mlruns/
+
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+
+# Ignore DVC internal cache
+.dvc/cache/
+.dvc/tmp/
+
+# Keep Dockerfiles and required source files
+!requirements*.txt
+!src/
+!scripts/
+!Dockerfile.api
+!Dockerfile.frontend

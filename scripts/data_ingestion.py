@@ -5,9 +5,8 @@ This module handles loading and initial validation of the prepared dataset.
 """
 
 import pandas as pd
-import numpy as np
 import logging
-import pickle
+import os
 from pathlib import Path
 
 LOG_DIR = Path('logs')
@@ -19,6 +18,27 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s %(name)s %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+
+def _dvc_tracking_enabled() -> bool:
+    return os.getenv("ENABLE_DVC_TRACKING", "").lower() in {"1", "true", "yes"}
+
+
+def _try_dvc_track(file_path: str) -> None:
+    """Best-effort DVC tracking; disabled by default for Airflow containers."""
+    if not _dvc_tracking_enabled():
+        logger.info(f"DVC tracking skipped for {file_path}: ENABLE_DVC_TRACKING is not enabled")
+        return
+
+    import subprocess
+    try:
+        subprocess.run(["dvc", "add", file_path], check=True, cwd=".")
+        subprocess.run(["git", "add", f"{file_path}.dvc"], check=True, cwd=".")
+        subprocess.run(["git", "commit", "-m", f"Track ingested data {file_path}"], check=True, cwd=".")
+        logger.info(f"Tracked {file_path} with DVC")
+    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
+        logger.warning(f"DVC tracking skipped for {file_path}: {e}")
+
 
 def ingest_data(input_path: str, output_path: str) -> None:
     """
@@ -55,11 +75,12 @@ def ingest_data(input_path: str, output_path: str) -> None:
         output_dir = Path(output_path).parent
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save processed dataframe
-        with open(output_path, 'wb') as f:
-            pickle.dump(df, f)
+        # Save processed dataframe as CSV
+        df.to_csv(output_path, index=False)
 
         logger.info(f"Data ingestion completed. Saved to {output_path}")
+
+        _try_dvc_track(output_path)
 
     except Exception as e:
         logger.error(f"Data ingestion failed: {str(e)}")
@@ -69,5 +90,5 @@ if __name__ == "__main__":
     # For testing
     ingest_data(
         input_path="data/raw/data.csv",
-        output_path="data/intermediate/full_data.pkl"
+        output_path="data/processedll_data.csv"
     )
