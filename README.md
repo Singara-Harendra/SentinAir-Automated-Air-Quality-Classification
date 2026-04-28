@@ -1,3 +1,4 @@
+
 # SentinAir: Automated Air Quality Classification MLOps Pipeline
 
 A complete MLOps pipeline for air quality classification using Apache Airflow, MLflow, FastAPI, and monitoring.
@@ -6,10 +7,10 @@ A complete MLOps pipeline for air quality classification using Apache Airflow, M
 
 ```
 Raw Data (DVC) → Airflow Pipeline → Multiple Models → MLflow Registry → FastAPI
-                    ↓                        ↓
-            Feedback Loop ← Streamlit ← PostgreSQL ← Prometheus → Grafana
-                              ↓
-                        Retraining DAG
+                     ↓                                                       ↓
+             Feedback Loop ← Streamlit ← PostgreSQL ← Prometheus → Grafana & cAdvisor
+                               ↓
+                       Retraining DAG
 ```
 
 **Key Components:**
@@ -20,7 +21,7 @@ Raw Data (DVC) → Airflow Pipeline → Multiple Models → MLflow Registry → 
 - **API Service**: FastAPI with prediction and feedback endpoints
 - **Frontend**: Streamlit app with feedback collection
 - **Database**: PostgreSQL for feedback storage and MLflow backend
-- **Monitoring**: Prometheus metrics, Grafana dashboards, Alertmanager notifications
+- **Monitoring**: Prometheus metrics, Grafana dashboards, Alertmanager notifications, and cAdvisor resource tracking
 - **Retraining**: Automated pipeline combining raw + feedback data
 
 ## 📁 Project Structure
@@ -36,7 +37,7 @@ Raw Data (DVC) → Airflow Pipeline → Multiple Models → MLflow Registry → 
 ├── src/
 │   ├── api/          # FastAPI application with feedback endpoint
 │   ├── frontend/     # Streamlit web interface with feedback
-│   └── monitoring/   # Prometheus, Grafana, Alertmanager configs
+│   └── monitoring/   # Prometheus, Grafana, Alertmanager, cAdvisor configs
 ├── logs/             # Pipeline execution logs
 ├── mlruns/           # MLflow experiment tracking
 ├── requirements.txt  # Python dependencies
@@ -62,8 +63,9 @@ cd SentinAir-Automated-Air-Quality-Classification
 git lfs install
 git lfs track "*.csv"
 
-# Initialize DVC
+# Initialize DVC and fix cache link types for Docker volume compatibility
 dvc init --no-scm
+dvc config cache.type copy
 dvc remote add -d myremote /path/to/dvc/storage  # Or cloud storage
 ```
 
@@ -90,21 +92,19 @@ ALERT_EMAIL_FROM=your-email@gmail.com
 ALERT_EMAIL_TO=recipient@example.com
 ```
 
-> Note: Do not commit real credentials to source control. Keep `.env` private and replace SMTP values in `src/monitoring/alertmanager.yml` locally before starting the stack.
-
 ### 4. Build and Start Services
 ```bash
 # Build all services
-docker-compose build
+docker compose build
 
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # Initialize Airflow database
-docker-compose exec airflow-webserver airflow db init
+docker compose exec airflow-webserver airflow db init
 
 # Create Airflow admin user
-docker-compose exec airflow-webserver airflow users create \
+docker compose exec airflow-webserver airflow users create \
     --username admin \
     --firstname Admin \
     --lastname User \
@@ -120,12 +120,14 @@ docker-compose exec airflow-webserver airflow users create \
 - **Streamlit App**: http://localhost:8501
 - **Grafana**: http://localhost:3000 (admin/admin)
 - **Prometheus**: http://localhost:9090
+- **Alertmanager**: http://localhost:9093 (View active alerts)
+- **cAdvisor**: http://localhost:8081 (Container resource monitoring)
 
 ### 6. Run the Pipeline
 ```bash
 # Trigger DAG manually in Airflow UI or via CLI
-docker-compose exec airflow-webserver airflow dags unpause air_quality_pipeline
-docker-compose exec airflow-webserver airflow dags trigger air_quality_pipeline
+docker compose exec airflow-webserver airflow dags unpause air_quality_pipeline
+docker compose exec airflow-webserver airflow dags trigger air_quality_pipeline
 
 # Or run individual scripts locally (after pip install -r requirements.txt)
 python scripts/data_ingestion.py
@@ -149,8 +151,9 @@ python scripts/model_training.py
 
 ### 9. Monitoring and Alerting
 - Prometheus scrapes metrics from API
+- cAdvisor tracks Docker container resources
 - Grafana dashboards for visualization
-- Alertmanager sends emails for high error rates (configure SMTP in `alertmanager.yml`)
+- Alertmanager sends emails (if configured) or displays alerts for high error rates
 
 ### 10. Scaling and Production
 - Use Kubernetes for production deployment
@@ -205,7 +208,7 @@ MLFLOW_TRACKING_URI=http://localhost:5000
 MLFLOW_EXPERIMENT_NAME=air_quality_classification
 
 # API
-MODEL_PATH=artifacts/model.pkl
+MODEL_PATH=artifacts/best_model.pkl
 PREPROCESSOR_PATH=artifacts/fitted_preprocessor.pkl
 API_PORT=8000
 ```
@@ -237,11 +240,11 @@ Edit `dags/air_quality_pipeline.py` to modify:
 
 ### Unit Tests
 ```bash
-# Run preprocessing tests
+# Run preprocessing tests locally
 python -m pytest tests/test_preprocessing.py
 
-# Run model tests
-python -m pytest tests/test_model.py
+# Run API tests directly inside the container (Recommended)
+docker exec -it air_quality_api pytest tests/test_api.py -v
 ```
 
 ### API Testing
@@ -252,7 +255,22 @@ curl http://localhost:8000/health
 # Make prediction
 curl -X POST "http://localhost:8000/predict" \
      -H "Content-Type: application/json" \
-     -d '{"features": [2.1, 1200.0, 150.0, 9.0, 800.0, 100.0, 25.0, 60.0, 1.5]}'
+     -d '{
+           "features": {
+             "PT08.S1(CO)": 1200.0,
+             "NMHC(GT)": 50.0,
+             "C6H6(GT)": 5.0,
+             "PT08.S2(NMHC)": 900.0,
+             "NOx(GT)": 100.0,
+             "PT08.S3(NOx)": 1000.0,
+             "NO2(GT)": 80.0,
+             "PT08.S4(NO2)": 1500.0,
+             "PT08.S5(O3)": 1000.0,
+             "T": 15.0,
+             "RH": 50.0,
+             "AH": 0.75
+           }
+         }'
 ```
 
 ## 🔄 CI/CD Pipeline
@@ -276,7 +294,7 @@ jobs:
       - name: Run tests
         run: python -m pytest
       - name: Build Docker images
-        run: docker-compose build
+        run: docker compose build
 ```
 
 ## 📚 API Documentation
@@ -285,23 +303,26 @@ jobs:
 
 - `GET /health` - Health check
 - `POST /predict` - Make prediction
-- `GET /model-info` - Model information
+- `GET /feedback/stats` - View current feedback error rates
 - `GET /metrics` - Prometheus metrics
 
 ### Prediction Request Format
 ```json
 {
-  "features": [
-    2.1,    // CO(GT)
-    1200.0, // PT08.S1(CO)
-    150.0,  // C6H6(GT)
-    9.0,    // PT08.S2(NMHC)
-    800.0,  // NOx(GT)
-    100.0,  // PT08.S3(NOx)
-    25.0,   // NO2(GT)
-    60.0,   // PT08.S4(NO2)
-    1.5     // PT08.S5(O3)
-  ]
+  "features": {
+    "PT08.S1(CO)": 1200.0,
+    "NMHC(GT)": 50.0,
+    "C6H6(GT)": 5.0,
+    "PT08.S2(NMHC)": 900.0,
+    "NOx(GT)": 100.0,
+    "PT08.S3(NOx)": 1000.0,
+    "NO2(GT)": 80.0,
+    "PT08.S4(NO2)": 1500.0,
+    "PT08.S5(O3)": 1000.0,
+    "T": 15.0,
+    "RH": 50.0,
+    "AH": 0.75
+  }
 }
 ```
 
@@ -325,14 +346,4 @@ MIT License - see LICENSE file for details.
 3. **Docker build fails**: Check Dockerfile syntax
 4. **MLflow connection**: Verify tracking URI
 
-### Logs Location
-- Airflow: `logs/`
-- API: Container logs
-- MLflow: `mlruns/`
-
-## 📞 Support
-
-For issues and questions:
-- Create an issue on GitHub
-- Check the troubleshooting section
-- Review Airflow/MLflow documentation
+```
