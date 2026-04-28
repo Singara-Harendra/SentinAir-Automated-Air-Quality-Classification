@@ -38,6 +38,7 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
 TRAINING_ROUND_FILE = ARTIFACTS_DIR / 'training_round.txt'
 BASELINE_STATS_FILE = ARTIFACTS_DIR / 'baseline_stats.json'
+BEST_METRIC_FILE = ARTIFACTS_DIR / 'best_f1_score.txt'
 
 
 def load_data(train_path: str, test_path: str) -> tuple:
@@ -149,7 +150,7 @@ def train_and_evaluate_model(
     y_train: pd.Series,
     X_test: pd.DataFrame,
     y_test: pd.Series,
-    run_name: str,                      # FIX #6: accept run_name so filenames match
+    run_name: str,
 ) -> Dict[str, Any]:
     """Train and evaluate a single model while generating artifacts."""
     logger.info(f'Training {model_name}')
@@ -166,7 +167,6 @@ def train_and_evaluate_model(
         'f1_score': weighted_avg['f1-score'],
     }
 
-    # FIX #6: use run_name for filenames so log_artifact paths match
     confusion_path = ARTIFACTS_DIR / f'{run_name}_confusion_matrix.png'
     learning_curve_path = ARTIFACTS_DIR / f'{run_name}_learning_curve.png'
 
@@ -201,7 +201,7 @@ def log_model_to_mlflow(
     with mlflow.start_run(run_name=run_name):
         mlflow.log_params(params)
         mlflow.log_metrics(metrics)
-        # Tag dataset name and training round for traceability
+        
         mlflow.set_tag("dataset_name", train_path if train_path else "unknown")
         mlflow.set_tag("model_name", model_name)
         mlflow.set_tag("run_name", run_name)
@@ -261,8 +261,8 @@ def train_and_log_models(
         run_artifacts = {
             'label_mapping': 'artifacts/label_mapping.csv',
             'classification_report': report_path,
-            'confusion_matrix': result['confusion_path'],     # FIX #6: use result path
-            'learning_curve': result['learning_curve_path'],  # FIX #6: use result path
+            'confusion_matrix': result['confusion_path'],
+            'learning_curve': result['learning_curve_path'],
             'baseline_stats': str(BASELINE_STATS_FILE),
         }
 
@@ -289,16 +289,36 @@ def train_and_log_models(
             f"F1: {result['metrics']['f1_score']:.4f}"
         )
 
-    best_model = results[best_model_name]['model']
-    best_model_path = ARTIFACTS_DIR / 'best_model.pkl'
-    joblib.dump(best_model, best_model_path)
-    logger.info(f'Best model ({best_model_name}) saved to {best_model_path}')
+    # --- CHAMPION VS CHALLENGER LOGIC ---
+    
+    historical_best_f1 = 0.0
+    if BEST_METRIC_FILE.exists():
+        try:
+            historical_best_f1 = float(BEST_METRIC_FILE.read_text().strip())
+        except ValueError:
+            historical_best_f1 = 0.0
 
-    if best_run_id:
-        register_best_model(best_model_name, best_run_id)
+    logger.info(f"Current Round Best: {best_model_name} (F1: {best_f1_score:.4f})")
+    logger.info(f"Historical Champion F1: {historical_best_f1:.4f}")
+
+    if best_f1_score > historical_best_f1:
+        logger.info("🎉 New model outperforms the champion! Updating artifacts.")
+        
+        # Save new best model
+        best_model = results[best_model_name]['model']
+        best_model_path = ARTIFACTS_DIR / 'best_model.pkl'
+        joblib.dump(best_model, best_model_path)
+        
+        # Overwrite historical best score
+        BEST_METRIC_FILE.write_text(str(best_f1_score))
+        
+        # Register to MLflow
+        if best_run_id:
+            register_best_model(best_model_name, best_run_id)
+    else:
+        logger.info("🛡️ Champion defends its title. Old model kept. No MLflow registration.")
 
     save_training_round(round_num)
-    logger.info(f'Best model: {best_model_name} with F1 score {best_f1_score:.4f}')
 
 
 def register_best_model(best_model_name: str, best_run_id: str) -> None:

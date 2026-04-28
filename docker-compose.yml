@@ -236,7 +236,21 @@ services:
       - '--storage.tsdb.retention.time=200h'
     networks:
       - monitoring
-      - app          # FIX: must be on app network to reach api:8000
+      - app          
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: air_quality_cadvisor
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring
+
 
   grafana:
     image: grafana/grafana:latest
@@ -261,8 +275,11 @@ services:
       - "9093:9093"
     volumes:
       - ./src/monitoring/alertmanager.yml:/etc/alertmanager/config.yml
+    env_file:
+      - .env
     command:
       - '--config.file=/etc/alertmanager/config.yml'
+      - '--config.expand-env'
     networks:
       - monitoring
 

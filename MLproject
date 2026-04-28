@@ -1,0 +1,8 @@
+name: SentinAir_MLOps_Pipeline
+python_env: requirements.txt
+
+entry_points:
+  main:
+    parameters:
+      data_path: {type: string, default: "data/processed/intermediate/"}
+    command: "python scripts/model_training.py"

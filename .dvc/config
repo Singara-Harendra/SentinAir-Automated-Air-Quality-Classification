@@ -1,5 +1,7 @@
 [core]
     no_scm = True
     remote = localremote
+[cache]
+    type = copy
 ['remote "localremote"']
     url = /home/harendra/dvc_remote_storage

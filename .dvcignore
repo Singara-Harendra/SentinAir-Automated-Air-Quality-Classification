@@ -3,7 +3,6 @@ venv
 .env
 .git
 logs
-artifacts
 mlruns
 __pycache__
 *.py[cod]

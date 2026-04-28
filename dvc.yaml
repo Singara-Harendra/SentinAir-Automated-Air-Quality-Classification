@@ -1,0 +1,29 @@
+stages:
+  ingest:
+    cmd: python scripts/data_ingestion.py
+    deps:
+      - scripts/data_ingestion.py
+      - data/raw/data.csv
+    outs:
+      - data/processed/processed_data.csv
+
+  preprocess:
+    cmd: python scripts/preprocessing.py
+    deps:
+      - scripts/preprocessing.py
+      - data/processed/processed_data.csv
+    outs:
+      - data/processed/train_data.csv
+      - data/processed/test_data.csv
+      - artifacts/fitting/fitted_preprocessor.pkl
+
+  train:
+    cmd: python scripts/model_training.py
+    deps:
+      - scripts/model_training.py
+      - data/processed/train_data.csv
+      - data/processed/test_data.csv
+      - artifacts/fitting/fitted_preprocessor.pkl
+    outs:
+      - artifacts/model.pkl
+      - artifacts/metrics.json
